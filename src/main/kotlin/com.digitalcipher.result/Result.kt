@@ -128,7 +128,6 @@ class BaseFailureProjection<S, F>(val result: Result<S, F>) {
     fun <F1> flatMap(fn: (F) -> Result<S, F1>): Result<S, F1> = when (result) {
         is BaseSuccess -> BaseSuccess(result.value)
         is BaseFailure -> fn(result.error)
-        else -> result as Result<S, F1>
     }
 
     @Suppress("UNCHECKED_CAST")
