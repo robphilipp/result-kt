@@ -77,13 +77,25 @@ abstract class Result<S, F> {
 
     abstract fun isSuccess(): Boolean
     abstract fun isFailure(): Boolean
+
+    // todo need to create defaultSuccess and defaultFailure, then partial specializations can
+    //      implement these without user intervention
+//    abstract fun successSupplier(): () -> BaseSuccess<S, F>
+//    abstract fun failureSupplier(): () -> BaseFailure<S, F>
+//    abstract fun supplier(): () -> Result<S, F>
+
 }
 
+//data class BaseSuccess<S, F>(val value: S, val failureSupplier: () -> BaseFailure<S, F>) : Result<S, F>() {
 data class BaseSuccess<S, F>(val value: S) : Result<S, F>() {
     override fun isSuccess() = true
     override fun isFailure() = false
 
+//    override fun successSupplier(): () -> BaseSuccess<S, F> = { BaseSuccess(value) }
+//    override fun failureSupplier(): () -> BaseFailure<S, F> = failureSupplier()
+
     fun success(): S = value
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -108,7 +120,9 @@ open class BaseFailure<S, F>(val error: F) : Result<S, F>() {
     override fun isSuccess() = false
     override fun isFailure() = true
 
-    open fun failure(): F = error
+//    override fun failureSupplier(): () -> BaseFailure<S, F> = { BaseFailure(error) }
+
+    fun failure(): F = error
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -189,3 +203,22 @@ class BaseFailureProjection<S, F>(val result: Result<S, F>) {
         else -> kotlin.Result.failure(Throwable())
     }
 }
+
+//fun <S, F> callResultSupplier(supplier: () -> Result<S, F>): Result<S, F> =
+//    try {
+//        supplier()
+//    } catch (e: Throwable) {
+//        failure()
+//    }
+
+//class ComposableFailure<S> private constructor(
+//    errors: List<Pair<String, String>> = emptyList()
+//) : Failure<S, List<Pair<String, String>>>(errors, { e1, e2 -> e1 + e2}) {
+//    constructor(message: String, key: String = "error") : this(listOf(key to message))
+//
+//    fun add(key: String, message: String): ComposableFailure<S> =
+//        ComposableFailure((super.add(listOf(key to message)) as Failure<S, List<Pair<String, String>>>).failure())
+//
+//    override fun <S1> map(fn: (S) -> S1): Result<S1, List<Pair<String, String>>> =
+//        ComposableFailure((super.map(fn) as Failure).failure())
+//}
