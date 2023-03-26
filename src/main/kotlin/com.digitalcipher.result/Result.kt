@@ -147,22 +147,3 @@ class BaseFailureProjection<S, F>(val result: Result<S, F>) {
         is BaseSuccess -> kotlin.Result.failure(Throwable(result.value.toString()))
     }
 }
-
-//fun <S, F> callResultSupplier(supplier: () -> Result<S, F>): Result<S, F> =
-//    try {
-//        supplier()
-//    } catch (e: Throwable) {
-//        error
-//    }
-
-//class ComposableFailure<S> private constructor(
-//    errors: List<Pair<String, String>> = emptyList()
-//) : Failure<S, List<Pair<String, String>>>(errors, { e1, e2 -> e1 + e2}) {
-//    constructor(message: String, key: String = "error") : this(listOf(key to message))
-//
-//    fun add(key: String, message: String): ComposableFailure<S> =
-//        ComposableFailure((super.add(listOf(key to message)) as Failure<S, List<Pair<String, String>>>).error)
-//
-//    override fun <S1> map(fn: (S) -> S1): Result<S1, List<Pair<String, String>>> =
-//        ComposableFailure((super.map(fn) as Failure).error)
-//}

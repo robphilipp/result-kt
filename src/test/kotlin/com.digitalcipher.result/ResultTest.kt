@@ -23,6 +23,13 @@ class ResultTest {
     }
 
     @Test
+    fun `should be able to throw an exception in a fold`() {
+        assertThrows(Throwable::class.java) {
+            Success("yay!").fold({ throw Throwable("oops") }, { mess -> mess[0].second.lowercase() })
+        }
+    }
+
+    @Test
     fun `should be able to swap a success and a failure`() {
         assertEquals(
             BaseSuccess<Int, String>(314).swap(),
