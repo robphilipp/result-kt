@@ -200,7 +200,7 @@ class ResultTest {
             .add("warning", "really an error")
             .add("info", "really? should be an error")
         assertEquals(
-            failure.failure(),
+            failure.error,
             listOf("error" to "first error", "warning" to "really an error", "info" to "really? should be an error")
         )
         assertEquals(

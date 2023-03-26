@@ -5,34 +5,42 @@ import java.util.Optional
 /**
  * Success biased.
  */
-abstract class Result<S, F> {
+sealed class Result<S, F> {
 
     fun projection() = BaseFailureProjection(this)
 
-    fun <C> fold(successFn: (success: S) -> C, failureFn: (failure: F) -> C): C =
-        if (this is BaseSuccess) successFn(success()) else failureFn((this as BaseFailure).failure())
-
-    fun swap(): Result<F, S> =
-        if (this is BaseSuccess) BaseFailure(success()) else BaseSuccess((this as BaseFailure).failure())
-
-    fun <U> foreach(effectFn: (success: S) -> U) {
-        if (this is BaseSuccess) effectFn(success())
+    fun <C> fold(successFn: (success: S) -> C, failureFn: (failure: F) -> C): C = when (this) {
+        is BaseSuccess -> successFn(value)
+        is BaseFailure -> failureFn(error)
     }
 
-    fun getOrElse(supplier: () -> S): S =
-        if (this is BaseSuccess) success() else supplier()
+    fun swap(): Result<F, S> = when (this) {
+        is BaseSuccess -> BaseFailure(value)
+        is BaseFailure -> BaseSuccess(error)
+    }
 
-    fun orElse(supplier: () -> Result<S, F>): Result<S, F> =
-        if (this is BaseSuccess) this else supplier()
+    fun <U> foreach(effectFn: (success: S) -> U) {
+        if (this is BaseSuccess) effectFn(value)
+    }
 
-    fun contains(elem: S): Boolean =
-        if (this is BaseSuccess) success() == elem else false
+    fun getOrElse(supplier: () -> S): S = when (this) {
+        is BaseSuccess -> value
+        else -> supplier()
+    }
 
-    fun forall(predicate: (S) -> Boolean): Boolean =
-        if (this is BaseSuccess) predicate(success()) else true
+    fun orElse(supplier: () -> Result<S, F>): Result<S, F> = when (this) {
+        is BaseSuccess -> this
+        else -> supplier()
+    }
 
-    fun exists(predicate: (S) -> Boolean): Boolean =
-        if (this is BaseSuccess) predicate(success()) else false
+    fun contains(elem: S): Boolean = this is BaseSuccess && value == elem
+
+    fun forall(predicate: (S) -> Boolean): Boolean = when (this) {
+        is BaseSuccess -> predicate(value)
+        else -> true
+    }
+
+    fun exists(predicate: (S) -> Boolean): Boolean = this is BaseSuccess && predicate(value)
 
     /**
      *
@@ -40,16 +48,14 @@ abstract class Result<S, F> {
      *       or a failure, and the compiler doesn't know that and thinks the
      *       else is possible.
      */
-    @Suppress("UNCHECKED_CAST")
     fun <S1> flatMap(fn: (S) -> Result<S1, F>): Result<S1, F> = when (this) {
-        is BaseSuccess -> fn(success())
-        is BaseFailure -> BaseFailure(failure())
-        else -> this as Result<S1, F>
+        is BaseSuccess -> fn(value)
+        is BaseFailure -> BaseFailure(error)
     }
 
     @Suppress("UNCHECKED_CAST")
     fun <S1> flatten(): Result<S1, F> =
-        if (this is BaseSuccess && success() is Result<*, *>) success() as Result<S1, F> else this as BaseFailure<S1, F>
+        if (this is BaseSuccess && value is Result<*, *>) value as Result<S1, F> else this as BaseFailure<S1, F>
 
     /**
      *
@@ -59,88 +65,27 @@ abstract class Result<S, F> {
      */
     @Suppress("UNCHECKED_CAST")
     fun <S1> map(fn: (S) -> S1): Result<S1, F> = when (this) {
-        is BaseSuccess -> BaseSuccess(fn(success()))
-        is BaseFailure -> BaseFailure(failure())
-        else -> this as Result<S1, F>
+        is BaseSuccess -> BaseSuccess(fn(value))
+        is BaseFailure -> BaseFailure(error)
     }
 
     fun toOption(): Optional<S & Any> = when (this) {
-        is BaseSuccess -> Optional.ofNullable(success())
+        is BaseSuccess -> Optional.ofNullable(value)
         else -> Optional.empty()
     }
 
     fun toResult(): kotlin.Result<S> = when (this) {
-        is BaseSuccess -> kotlin.Result.success(success())
-        is BaseFailure -> kotlin.Result.failure(Throwable(failure().toString()))
-        else -> kotlin.Result.failure(Throwable())
+        is BaseSuccess -> kotlin.Result.success(value)
+        is BaseFailure -> kotlin.Result.failure(Throwable(error.toString()))
     }
 
-    abstract fun isSuccess(): Boolean
-    abstract fun isFailure(): Boolean
-
-    // todo need to create defaultSuccess and defaultFailure, then partial specializations can
-    //      implement these without user intervention
-//    abstract fun successSupplier(): () -> BaseSuccess<S, F>
-//    abstract fun failureSupplier(): () -> BaseFailure<S, F>
-//    abstract fun supplier(): () -> Result<S, F>
-
+    fun isSuccess(): Boolean = this is BaseSuccess
+    fun isFailure(): Boolean = this is BaseFailure
 }
 
-//data class BaseSuccess<S, F>(val value: S, val failureSupplier: () -> BaseFailure<S, F>) : Result<S, F>() {
-data class BaseSuccess<S, F>(val value: S) : Result<S, F>() {
-    override fun isSuccess() = true
-    override fun isFailure() = false
+data class BaseSuccess<S, F>(val value: S) : Result<S, F>()
 
-//    override fun successSupplier(): () -> BaseSuccess<S, F> = { BaseSuccess(value) }
-//    override fun failureSupplier(): () -> BaseFailure<S, F> = failureSupplier()
-
-    fun success(): S = value
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as BaseSuccess<*, *>
-
-        if (value != other.value) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        return value?.hashCode() ?: 0
-    }
-
-    override fun toString(): String {
-        return "BaseSuccess(value=$value)"
-    }
-}
-
-open class BaseFailure<S, F>(val error: F) : Result<S, F>() {
-    override fun isSuccess() = false
-    override fun isFailure() = true
-
-//    override fun failureSupplier(): () -> BaseFailure<S, F> = { BaseFailure(error) }
-
-    fun failure(): F = error
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as BaseFailure<*, *>
-
-        if (error != other.error) return false
-
-        return true
-    }
-
-    override fun hashCode(): Int = error?.hashCode() ?: 0
-
-    override fun toString(): String {
-        return "Failure(error=$error)"
-    }
-}
+data class BaseFailure<S, F>(val error: F) : Result<S, F>()
 
 typealias Success<S> = BaseSuccess<S, List<Pair<String, String>>>
 
@@ -150,28 +95,28 @@ typealias FailureProjection<S> = BaseFailureProjection<S, List<Pair<String, Stri
 fun <S> Failure(value: String) = Failure<S>(listOf(Pair("error", value)))
 fun <S> Failure<S>.add(name: String, value: String) = Failure<S>(error + Pair(name, value))
 fun <S> FailureProjection<S>.containsDeep(elem: Pair<String, String>): Boolean =
-    if (result is BaseFailure) result.failure().contains(elem) else false
+    if (result is BaseFailure) result.error.contains(elem) else false
 
 
 class BaseFailureProjection<S, F>(val result: Result<S, F>) {
     fun <U> foreach(effectFn: (failure: F) -> U) {
-        if (result is BaseFailure) effectFn(result.failure())
+        if (result is BaseFailure) effectFn(result.error)
     }
 
     fun getOrElse(supplier: () -> F): F =
-        if (result is BaseFailure) result.failure() else supplier()
+        if (result is BaseFailure) result.error else supplier()
 
     fun orElse(supplier: () -> Result<S, F>): Result<S, F> =
         if (result is BaseFailure) result else supplier()
 
     fun contains(elem: F): Boolean =
-        if (result is BaseFailure) result.failure() == elem else false
+        if (result is BaseFailure) result.error == elem else false
 
     fun forall(predicate: (F) -> Boolean): Boolean =
-        if (result is BaseFailure) predicate(result.failure()) else true
+        if (result is BaseFailure) predicate(result.error) else true
 
     fun exists(predicate: (F) -> Boolean): Boolean =
-        if (result is BaseFailure) predicate(result.failure()) else false
+        if (result is BaseFailure) predicate(result.error) else false
 
     /**
      *
@@ -181,26 +126,25 @@ class BaseFailureProjection<S, F>(val result: Result<S, F>) {
      */
     @Suppress("UNCHECKED_CAST")
     fun <F1> flatMap(fn: (F) -> Result<S, F1>): Result<S, F1> = when (result) {
-        is BaseSuccess -> BaseSuccess(result.success())
-        is BaseFailure -> fn(result.failure())
+        is BaseSuccess -> BaseSuccess(result.value)
+        is BaseFailure -> fn(result.error)
         else -> result as Result<S, F1>
     }
 
     @Suppress("UNCHECKED_CAST")
     fun <F1> map(fn: (F) -> F1): Result<S, F1> =
-        if (result is BaseFailure && result.failure() is Result<*, *>)
-            result.failure() as Result<S, F1>
+        if (result is BaseFailure && result.error is Result<*, *>)
+            result.error as Result<S, F1>
         else
             result as BaseSuccess<S, F1>
 
     @Suppress("NULLABLE_TYPE_PARAMETER_AGAINST_NOT_NULL_TYPE_PARAMETER")
     fun toOption(): Optional<F & Any> =
-        if (result is BaseFailure) Optional.ofNullable(result.failure()) else Optional.empty()
+        if (result is BaseFailure) Optional.ofNullable(result.error) else Optional.empty()
 
     fun toResult(): kotlin.Result<F> = when (result) {
-        is BaseFailure -> kotlin.Result.success(result.failure())
-        is BaseSuccess -> kotlin.Result.failure(Throwable(result.success().toString()))
-        else -> kotlin.Result.failure(Throwable())
+        is BaseFailure -> kotlin.Result.success(result.error)
+        is BaseSuccess -> kotlin.Result.failure(Throwable(result.value.toString()))
     }
 }
 
@@ -208,7 +152,7 @@ class BaseFailureProjection<S, F>(val result: Result<S, F>) {
 //    try {
 //        supplier()
 //    } catch (e: Throwable) {
-//        failure()
+//        error
 //    }
 
 //class ComposableFailure<S> private constructor(
@@ -217,8 +161,8 @@ class BaseFailureProjection<S, F>(val result: Result<S, F>) {
 //    constructor(message: String, key: String = "error") : this(listOf(key to message))
 //
 //    fun add(key: String, message: String): ComposableFailure<S> =
-//        ComposableFailure((super.add(listOf(key to message)) as Failure<S, List<Pair<String, String>>>).failure())
+//        ComposableFailure((super.add(listOf(key to message)) as Failure<S, List<Pair<String, String>>>).error)
 //
 //    override fun <S1> map(fn: (S) -> S1): Result<S1, List<Pair<String, String>>> =
-//        ComposableFailure((super.map(fn) as Failure).failure())
+//        ComposableFailure((super.map(fn) as Failure).error)
 //}
