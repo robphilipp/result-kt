@@ -5,7 +5,7 @@ import java.util.Optional
 /**
  * Success biased.
  */
-sealed class Result<S, F> {
+sealed class BaseResult<S, F> {
 
     fun projection() = BaseFailureProjection(this)
 
@@ -14,7 +14,7 @@ sealed class Result<S, F> {
         is BaseFailure -> failureFn(error)
     }
 
-    fun swap(): Result<F, S> = when (this) {
+    fun swap(): BaseResult<F, S> = when (this) {
         is BaseSuccess -> BaseFailure(value)
         is BaseFailure -> BaseSuccess(error)
     }
@@ -28,7 +28,7 @@ sealed class Result<S, F> {
         else -> supplier()
     }
 
-    fun orElse(supplier: () -> Result<S, F>): Result<S, F> = when (this) {
+    fun orElse(supplier: () -> BaseResult<S, F>): BaseResult<S, F> = when (this) {
         is BaseSuccess -> this
         else -> supplier()
     }
@@ -42,29 +42,16 @@ sealed class Result<S, F> {
 
     fun exists(predicate: (S) -> Boolean): Boolean = this is BaseSuccess && predicate(value)
 
-    /**
-     *
-     * Note: suppress unchecked cast because the result must be either a success
-     *       or a failure, and the compiler doesn't know that and thinks the
-     *       else is possible.
-     */
-    fun <S1> flatMap(fn: (S) -> Result<S1, F>): Result<S1, F> = when (this) {
+    fun <S1> flatMap(fn: (S) -> BaseResult<S1, F>): BaseResult<S1, F> = when (this) {
         is BaseSuccess -> fn(value)
         is BaseFailure -> BaseFailure(error)
     }
 
     @Suppress("UNCHECKED_CAST")
-    fun <S1> flatten(): Result<S1, F> =
-        if (this is BaseSuccess && value is Result<*, *>) value as Result<S1, F> else this as BaseFailure<S1, F>
+    fun <S1> flatten(): BaseResult<S1, F> =
+        if (this is BaseSuccess && value is BaseResult<*, *>) value as BaseResult<S1, F> else this as BaseFailure<S1, F>
 
-    /**
-     *
-     * Note: suppress unchecked cast because the result must be either a success
-     *       or a failure, and the compiler doesn't know that and thinks the
-     *       else is possible.
-     */
-    @Suppress("UNCHECKED_CAST")
-    fun <S1> map(fn: (S) -> S1): Result<S1, F> = when (this) {
+    fun <S1> map(fn: (S) -> S1): BaseResult<S1, F> = when (this) {
         is BaseSuccess -> BaseSuccess(fn(value))
         is BaseFailure -> BaseFailure(error)
     }
@@ -83,22 +70,27 @@ sealed class Result<S, F> {
     fun isFailure(): Boolean = this is BaseFailure
 }
 
-data class BaseSuccess<S, F>(val value: S) : Result<S, F>()
+data class BaseSuccess<S, F>(val value: S) : BaseResult<S, F>()
 
-data class BaseFailure<S, F>(val error: F) : Result<S, F>()
+data class BaseFailure<S, F>(val error: F) : BaseResult<S, F>()
 
+typealias Result<S> = BaseResult<S, List<Pair<String, String>>>
 typealias Success<S> = BaseSuccess<S, List<Pair<String, String>>>
 
 typealias Failure<S> = BaseFailure<S, List<Pair<String, String>>>
 typealias FailureProjection<S> = BaseFailureProjection<S, List<Pair<String, String>>>
+
 @Suppress("FunctionName")
 fun <S> Failure(value: String) = Failure<S>(listOf(Pair("error", value)))
 fun <S> Failure<S>.add(name: String, value: String) = Failure<S>(error + Pair(name, value))
 fun <S> FailureProjection<S>.containsDeep(elem: Pair<String, String>): Boolean =
     if (result is BaseFailure) result.error.contains(elem) else false
 
+fun <S, S1> Success<S>.safeMap(fn: (S) -> S1): Result<S1> =
+    safeResultFn({ map(fn) }, { e -> listOf(Pair("error", e.message ?: "")) })
 
-class BaseFailureProjection<S, F>(val result: Result<S, F>) {
+
+class BaseFailureProjection<S, F>(val result: BaseResult<S, F>) {
     fun <U> foreach(effectFn: (failure: F) -> U) {
         if (result is BaseFailure) effectFn(result.error)
     }
@@ -106,7 +98,7 @@ class BaseFailureProjection<S, F>(val result: Result<S, F>) {
     fun getOrElse(supplier: () -> F): F =
         if (result is BaseFailure) result.error else supplier()
 
-    fun orElse(supplier: () -> Result<S, F>): Result<S, F> =
+    fun orElse(supplier: () -> BaseResult<S, F>): BaseResult<S, F> =
         if (result is BaseFailure) result else supplier()
 
     fun contains(elem: F): Boolean =
@@ -118,26 +110,16 @@ class BaseFailureProjection<S, F>(val result: Result<S, F>) {
     fun exists(predicate: (F) -> Boolean): Boolean =
         if (result is BaseFailure) predicate(result.error) else false
 
-    /**
-     *
-     * Note: suppress unchecked cast because the result must be either a success
-     *       or a failure, and the compiler doesn't know that and thinks the
-     *       else is possible.
-     */
-    @Suppress("UNCHECKED_CAST")
-    fun <F1> flatMap(fn: (F) -> Result<S, F1>): Result<S, F1> = when (result) {
+    fun <F1> flatMap(fn: (F) -> BaseResult<S, F1>): BaseResult<S, F1> = when (result) {
         is BaseSuccess -> BaseSuccess(result.value)
         is BaseFailure -> fn(result.error)
     }
 
-    @Suppress("UNCHECKED_CAST")
-    fun <F1> map(fn: (F) -> F1): Result<S, F1> =
-        if (result is BaseFailure && result.error is Result<*, *>)
-            result.error as Result<S, F1>
-        else
-            result as BaseSuccess<S, F1>
+    fun <F1> map(fn: (F) -> F1): BaseResult<S, F1> = when (result) {
+        is BaseSuccess -> BaseSuccess(result.value)
+        is BaseFailure -> BaseFailure(fn(result.error))
+    }
 
-    @Suppress("NULLABLE_TYPE_PARAMETER_AGAINST_NOT_NULL_TYPE_PARAMETER")
     fun toOption(): Optional<F & Any> =
         if (result is BaseFailure) Optional.ofNullable(result.error) else Optional.empty()
 
@@ -146,3 +128,17 @@ class BaseFailureProjection<S, F>(val result: Result<S, F>) {
         is BaseSuccess -> kotlin.Result.failure(Throwable(result.value.toString()))
     }
 }
+
+inline fun <S, F> safeCall(fn: () -> S, errorSupplier: (e: Throwable) -> F): BaseResult<S, F> =
+    try {
+        BaseSuccess(fn())
+    } catch (e: Exception) {
+        BaseFailure(errorSupplier(e))
+    }
+
+inline fun <S, F> safeResultFn(fn: () -> BaseResult<S, F>, errorSupplier: (e: Throwable) -> F): BaseResult<S, F> =
+    try {
+        fn()
+    } catch(e: Exception) {
+        BaseFailure(errorSupplier(e))
+    }

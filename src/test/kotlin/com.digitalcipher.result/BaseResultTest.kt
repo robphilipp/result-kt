@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test
 
 import org.junit.jupiter.api.Assertions.*
 
-class ResultTest {
+class BaseResultTest {
 
     @Test
     fun `should be able fold success and failures`() {
@@ -217,6 +217,22 @@ class ResultTest {
         assertEquals(
             failure.projection().getOrElse { emptyList() },
             listOf("error" to "first error", "warning" to "really an error", "info" to "really? should be an error")
+        )
+    }
+
+    @Test
+    fun `should be able to do a safe map on a success`() {
+        assertEquals(
+            "YAY!",
+            Success("yay!").safeMap { s -> s.uppercase() }.getOrElse { "boo" }
+        )
+    }
+
+    @Test
+    fun `should be able to do a safe map and a success where the function throws`() {
+        assertEquals(
+            listOf(Pair("error", "boo")),
+            Success("yay!").safeMap { throw Exception("boo") }.projection().getOrElse { emptyList() }
         )
     }
 }

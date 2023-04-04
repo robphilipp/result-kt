@@ -1,11 +1,11 @@
 package com.digitalcipher.result
 
-fun <S, S1> Result<S, List<Pair<String, String>>>.transaction(
+fun <S, S1> BaseResult<S, List<Pair<String, String>>>.transaction(
     transactional: (value: S) -> Boolean,
-    boundedFunction: () -> Result<S1, List<Pair<String, String>>>,
-    commitFunction: (value: S) -> Result<Boolean, List<Pair<String, String>>>,
-    rollbackFunction: (value: S) -> Result<Boolean, List<Pair<String, String>>>
-): Result<S1, List<Pair<String, String>>> = when (this) {
+    boundedFunction: () -> BaseResult<S1, List<Pair<String, String>>>,
+    commitFunction: (value: S) -> BaseResult<Boolean, List<Pair<String, String>>>,
+    rollbackFunction: (value: S) -> BaseResult<Boolean, List<Pair<String, String>>>
+): BaseResult<S1, List<Pair<String, String>>> = when (this) {
     is BaseFailure -> BaseFailure(error)
     is BaseSuccess -> {
         val result = boundedFunction()
