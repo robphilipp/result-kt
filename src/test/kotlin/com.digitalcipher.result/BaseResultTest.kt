@@ -7,6 +7,18 @@ import org.junit.jupiter.api.Assertions.*
 class BaseResultTest {
 
     @Test
+    fun `should be able to fold success and failure for base type`() {
+        assertEquals(
+            BaseSuccess<String, Throwable>("yay!").fold({ value -> value.uppercase() }, { Throwable("damn") }),
+            "YAY!"
+        )
+        assertEquals(
+            BaseFailure<String, Throwable>(Throwable("BOO")).fold( { value -> value.uppercase()}, { }),
+            Throwable("BOO")
+        )
+    }
+
+    @Test
     fun `should be able fold success and failures`() {
         assertEquals(
             Success("yay!").fold({ value -> value.uppercase() }, { mess -> mess[0].second.lowercase() }),
@@ -84,6 +96,33 @@ class BaseResultTest {
         assertEquals(success, Success(314))
         // the holder is what has changed
         assertEquals(holder, 628)
+    }
+
+    @Test
+    fun `a foreach should throw an exception of the lambda passed to it throws an exception`() {
+        assertThrows(Throwable::class.java) {
+            Success(314).foreach { throw Throwable("ouch!") }
+        }
+    }
+
+    @Test
+    fun `a safe foreach should be the same as a foreach when no exception is thrown`() {
+        var holder = 0
+        Success(314).foreach { value -> holder = value * 2 }
+        var safeHolder = 0
+        Success(314).safeForeach { value -> safeHolder = value * 2 }
+        assertEquals(holder, safeHolder)
+    }
+
+    @Test
+    fun `a safe foreach should return a failure when the foreach function throws an exception`() {
+        assertEquals(
+            errorMessagesWith("safety is our top priority"),
+            Success(314)
+                .safeForeach { throw Throwable("safety is our top priority") }
+                .projection()
+                .getOrElse { emptyErrorMessages() }
+        )
     }
 
     @Test
@@ -220,8 +259,8 @@ class BaseResultTest {
     fun `should be able to add a message to an extended failure`() {
 //        val failure = Failure<Int>(listOf(Pair("error", "first error")))
         val failure = Failure<Int>("first error")
-            .add("warning", "really an error")
-            .add("info", "really? should be an error")
+            .addError("warning", "really an error")
+            .addError("info", "really? should be an error")
         assertEquals(
             failure.error,
             listOf("error" to "first error", "warning" to "really an error", "info" to "really? should be an error")
@@ -231,7 +270,7 @@ class BaseResultTest {
             failure
         )
         assertEquals(
-            failure.projection().getOrElse { emptyList() },
+            failure.projection().getOrElse { emptyErrorMessages() },
             listOf("error" to "first error", "warning" to "really an error", "info" to "really? should be an error")
         )
     }
@@ -247,8 +286,8 @@ class BaseResultTest {
     @Test
     fun `should be able to do a safe map and a success where the function throws`() {
         assertEquals(
-            listOf(Pair("error", "boo")),
-            Success("yay!").safeMap { throw Exception("boo") }.projection().getOrElse { emptyList() }
+            errorMessagesWith("boo"),
+            Success("yay!").safeMap { throw Exception("boo") }.projection().getOrElse { emptyErrorMessages() }
         )
     }
 

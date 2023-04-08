@@ -74,43 +74,52 @@ data class BaseSuccess<S, F>(val value: S) : BaseResult<S, F>()
 
 data class BaseFailure<S, F>(val error: F) : BaseResult<S, F>()
 
-typealias Result<S> = BaseResult<S, List<Pair<String, String>>>
-typealias Success<S> = BaseSuccess<S, List<Pair<String, String>>>
+typealias ErrorMessages = List<Pair<String, String>>
+typealias Result<S> = BaseResult<S, ErrorMessages>
+typealias Success<S> = BaseSuccess<S, ErrorMessages>
 
-typealias Failure<S> = BaseFailure<S, List<Pair<String, String>>>
-typealias FailureProjection<S> = BaseFailureProjection<S, List<Pair<String, String>>>
+typealias Failure<S> = BaseFailure<S, ErrorMessages>
+typealias FailureProjection<S> = BaseFailureProjection<S, ErrorMessages>
+
+fun emptyErrorMessages(): ErrorMessages = emptyList()
+fun errorMessagesWith(message: String): ErrorMessages = listOf(Pair("error", message))
+fun errorMessagesReducer(key: String, message: String, messages: ErrorMessages): ErrorMessages =
+    messages + Pair(key, message)
+
+fun ErrorMessages.add(key: String, message: String): ErrorMessages = this + Pair(key, message)
 
 @Suppress("FunctionName")
-fun <S> Failure(value: String) = Failure<S>(listOf(Pair("error", value)))
-fun <S> Failure<S>.add(name: String, value: String) = Failure<S>(error + Pair(name, value))
+fun <S> Failure(value: String) = Failure<S>(errorMessagesWith(value))
+fun <S> Failure<S>.addError(name: String, value: String) = Failure<S>(error.add(name, value))
 fun <S> FailureProjection<S>.containsDeep(elem: Pair<String, String>): Boolean =
     if (result is BaseFailure) result.error.contains(elem) else false
 
 fun <S, S1> Success<S>.safeMap(fn: (S) -> S1): Result<S1> =
-    safeResultFn({ map(fn) }, { e -> listOf(Pair("error", e.message ?: "")) })
+    safeResultFn(
+        { map(fn) },
+        { e -> listOf(Pair("error", e.message ?: "")) }
+    )
 
 fun <S, C> Success<S>.safeFold(
     successFn: (success: S) -> C,
     failureFn: (failure: List<Pair<String, String>>) -> C
-): Result<C> = try {
-    Success(fold(successFn, failureFn))
-} catch (e: Throwable) {
-    BaseFailure(listOf(Pair("error", e.message ?: "")))
-}
+): Result<C> =
+    safeResultFn(
+        { Success(fold(successFn, failureFn)) },
+        { e -> errorMessagesWith(e.message ?: "") }
+    )
 
-fun <S, U> Success<S>.safeForeach(effectFn: (success: S) -> U): Result<Unit> = try {
-    foreach(effectFn)
-    Success(Unit)
-} catch (e: Throwable) {
-    Failure(listOf(Pair("error", e.message ?: "")))
-}
+fun <S, U> Success<S>.safeForeach(effectFn: (success: S) -> U): Result<Unit> =
+    safeResultFn(
+        { Success(foreach(effectFn)) },
+        { e -> errorMessagesWith(e.message ?: "") }
+    )
 
-fun <S> Success<S>.safeForall(predicate: (S) -> Boolean): Result<Boolean> = try {
-    val result = forall(predicate)
-    Success(result)
-} catch (e: Throwable) {
-    Failure(listOf(Pair("error", e.message ?: "")))
-}
+fun <S> Success<S>.safeForall(predicate: (S) -> Boolean): Result<Boolean> =
+    safeResultFn(
+        { Success(forall(predicate)) },
+        { e -> errorMessagesWith(e.message ?: "") }
+    )
 
 class BaseFailureProjection<S, F>(val result: BaseResult<S, F>) {
     fun <U> foreach(effectFn: (failure: F) -> U) {
