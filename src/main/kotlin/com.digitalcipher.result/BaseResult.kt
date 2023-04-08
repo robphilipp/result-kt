@@ -89,6 +89,28 @@ fun <S> FailureProjection<S>.containsDeep(elem: Pair<String, String>): Boolean =
 fun <S, S1> Success<S>.safeMap(fn: (S) -> S1): Result<S1> =
     safeResultFn({ map(fn) }, { e -> listOf(Pair("error", e.message ?: "")) })
 
+fun <S, C> Success<S>.safeFold(
+    successFn: (success: S) -> C,
+    failureFn: (failure: List<Pair<String, String>>) -> C
+): Result<C> = try {
+    Success(fold(successFn, failureFn))
+} catch (e: Throwable) {
+    BaseFailure(listOf(Pair("error", e.message ?: "")))
+}
+
+fun <S, U> Success<S>.safeForeach(effectFn: (success: S) -> U): Result<Unit> = try {
+    foreach(effectFn)
+    Success(Unit)
+} catch (e: Throwable) {
+    Failure(listOf(Pair("error", e.message ?: "")))
+}
+
+fun <S> Success<S>.safeForall(predicate: (S) -> Boolean): Result<Boolean> = try {
+    val result = forall(predicate)
+    Success(result)
+} catch (e: Throwable) {
+    Failure(listOf(Pair("error", e.message ?: "")))
+}
 
 class BaseFailureProjection<S, F>(val result: BaseResult<S, F>) {
     fun <U> foreach(effectFn: (failure: F) -> U) {
@@ -132,13 +154,13 @@ class BaseFailureProjection<S, F>(val result: BaseResult<S, F>) {
 inline fun <S, F> safeCall(fn: () -> S, errorSupplier: (e: Throwable) -> F): BaseResult<S, F> =
     try {
         BaseSuccess(fn())
-    } catch (e: Exception) {
+    } catch (e: Throwable) {
         BaseFailure(errorSupplier(e))
     }
 
 inline fun <S, F> safeResultFn(fn: () -> BaseResult<S, F>, errorSupplier: (e: Throwable) -> F): BaseResult<S, F> =
     try {
         fn()
-    } catch(e: Exception) {
+    } catch (e: Throwable) {
         BaseFailure(errorSupplier(e))
     }

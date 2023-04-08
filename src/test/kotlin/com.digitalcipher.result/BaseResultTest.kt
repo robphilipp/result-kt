@@ -23,10 +23,26 @@ class BaseResultTest {
     }
 
     @Test
-    fun `should be able to throw an exception in a fold`() {
+    fun `should be able to throw an exception in a fold and get back an exception`() {
         assertThrows(Throwable::class.java) {
             Success("yay!").fold({ throw Throwable("oops") }, { mess -> mess[0].second.lowercase() })
         }
+    }
+
+    @Test
+    fun `should be able to throw an exception in a safe-fold and get back a result`() {
+        assertEquals(
+            Failure<String>(listOf(Pair("error", "oops!"))),
+            Success("yay!").safeFold({ throw Throwable("oops!") }, { "damn!" })
+        )
+    }
+
+    @Test
+    fun `safe-fold should return a successful result`() {
+        assertEquals(
+            "YAY!",
+            Success("yay!").safeFold({ success -> success.uppercase() }, { "boo!" }).getOrElse { "BOO!" }
+        )
     }
 
     @Test
@@ -234,5 +250,10 @@ class BaseResultTest {
             listOf(Pair("error", "boo")),
             Success("yay!").safeMap { throw Exception("boo") }.projection().getOrElse { emptyList() }
         )
+    }
+
+    @Test
+    fun `regular map on a success whose function throws an exception should throw exception`() {
+        assertThrows(java.lang.Exception::class.java) { Success("yay!").map { throw Exception("boo") } }
     }
 }
