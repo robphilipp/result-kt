@@ -310,6 +310,18 @@ class BaseResultTest {
     }
 
     @Test
+    fun `map_should_work_on_success_but_not_failure`() {
+        assertEquals(
+            314,
+            Success(3.14).map { it * 10 }.getOrElse { 0.0 }
+        )
+        assertEquals(
+            errorMessagesWith("oops!"),
+            Failure<Double>("oops!").map { it * 10 }.projection().getOrElse { emptyList() }
+        )
+    }
+
+    @Test
     fun `should be able to do a safe map on a success`() {
         assertEquals(
             "YAY!",

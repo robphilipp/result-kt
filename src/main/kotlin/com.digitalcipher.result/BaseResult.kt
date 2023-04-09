@@ -3,7 +3,21 @@ package com.digitalcipher.result
 import java.util.Optional
 
 /**
- * Success biased.
+ * A success-biased result class returned from functions whose operations can fail.
+ *
+ * Generally, a result provides a useful abstraction to denote operations that can fail.
+ * When functions representing such operations return a [BaseResult], the caller of that
+ * function must explicitly deal with the possibility that the function failed.
+ *
+ * The [BaseResult] provides a rich set of methods and extensions, providing a declarative
+ * approach for representing a series of operations that could fail, without requiring
+ * complex conditional structures or appropriately place exception handling.
+ *
+ * The [BaseResult] is "success-biased", meaning that it operations generally apply to
+ * [BaseSuccess], and pass through [BaseFailure] unchanged. In this way, when an operation,
+ * that is part of a series of operations, fails, the downstream operations are not
+ * performed. Rather, a [BaseFailure] is returned.
+ *
  */
 sealed class BaseResult<S, F> {
 
@@ -120,6 +134,13 @@ fun <S> Success<S>.safeForall(predicate: (S) -> Boolean): Result<Boolean> =
         { e -> errorMessagesWith(e.message ?: "") }
     )
 
+/**
+ * [BaseResult] classes are "success-biased", meaning that the methods of the Result class operated
+ * on [BaseSuccess] and not on [BaseFailure]. There are cases where unpacking or transforming
+ * [BaseFailure] is useful. This projection provides the methods for doing that.
+ * @param result The [BaseResult] to project to a "failure-biased" result.
+ * @constructor
+ */
 class BaseFailureProjection<S, F>(val result: BaseResult<S, F>) {
     fun <U> foreach(effectFn: (failure: F) -> U) {
         if (result is BaseFailure) effectFn(result.error)
