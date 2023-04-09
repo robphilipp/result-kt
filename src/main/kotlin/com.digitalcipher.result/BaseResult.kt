@@ -81,12 +81,11 @@ typealias Success<S> = BaseSuccess<S, ErrorMessages>
 typealias Failure<S> = BaseFailure<S, ErrorMessages>
 typealias FailureProjection<S> = BaseFailureProjection<S, ErrorMessages>
 
+fun ErrorMessages.add(key: String, message: String): ErrorMessages = this + Pair(key, message)
 fun emptyErrorMessages(): ErrorMessages = emptyList()
 fun errorMessagesWith(message: String): ErrorMessages = listOf(Pair("error", message))
 fun errorMessagesReducer(key: String, message: String, messages: ErrorMessages): ErrorMessages =
-    messages + Pair(key, message)
-
-fun ErrorMessages.add(key: String, message: String): ErrorMessages = this + Pair(key, message)
+    messages.add(key, message)
 
 @Suppress("FunctionName")
 fun <S> Failure(value: String) = Failure<S>(errorMessagesWith(value))

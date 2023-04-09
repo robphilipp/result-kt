@@ -7,29 +7,44 @@ import org.junit.jupiter.api.Assertions.*
 class BaseResultTest {
 
     @Test
-    fun `should be able to fold success and failure for base type`() {
+    fun `should be able to fold success for base type`() {
         assertEquals(
-            BaseSuccess<String, Throwable>("yay!").fold({ value -> value.uppercase() }, { Throwable("damn") }),
-            "YAY!"
+            "YAY!",
+            BaseSuccess<String, Throwable>("yay!").fold({ it.uppercase() }, { Throwable("damn") })
         )
+    }
+
+    @Test
+    fun `should be able to fold failure for base type`() {
         assertEquals(
-            BaseFailure<String, Throwable>(Throwable("BOO")).fold( { value -> value.uppercase()}, { }),
-            Throwable("BOO")
+            Throwable("BOO").message,
+            BaseFailure<String, Throwable>(Throwable("BOO")).fold( { it.uppercase()}, { it.message })
         )
+    }
+
+    @Test
+    fun `should be able to convert a BaseFailure to a Failure`() {
+        assertEquals(
+            Failure<String>("BOO"),
+            BaseFailure<String, Throwable>(Throwable("BOO"))
+                .projection()
+                .flatMap { Failure(it.message ?: "") }
+        )
+
     }
 
     @Test
     fun `should be able fold success and failures`() {
         assertEquals(
-            Success("yay!").fold({ value -> value.uppercase() }, { mess -> mess[0].second.lowercase() }),
+            Success("yay!").fold({ it.uppercase() }, { it[0].second.lowercase() }),
             "YAY!"
         )
         assertEquals(
-            Failure<String>("BOO").fold({ value -> value.uppercase() }, { mess -> mess }),
+            Failure<String>("BOO").fold({ it.uppercase() }, { it }),
             listOf(Pair("error", "BOO"))
         )
         assertEquals(
-            Failure<String>("BOO").fold({ value -> value.uppercase() }, { mess -> mess[0].second.lowercase() }),
+            Failure<String>("BOO").fold({ it.uppercase() }, { it[0].second.lowercase() }),
             "boo"
         )
     }
@@ -37,7 +52,7 @@ class BaseResultTest {
     @Test
     fun `should be able to throw an exception in a fold and get back an exception`() {
         assertThrows(Throwable::class.java) {
-            Success("yay!").fold({ throw Throwable("oops") }, { mess -> mess[0].second.lowercase() })
+            Success("yay!").fold({ throw Throwable("oops") }, { it[0].second.lowercase() })
         }
     }
 
@@ -53,7 +68,7 @@ class BaseResultTest {
     fun `safe-fold should return a successful result`() {
         assertEquals(
             "YAY!",
-            Success("yay!").safeFold({ success -> success.uppercase() }, { "boo!" }).getOrElse { "BOO!" }
+            Success("yay!").safeFold({ it.uppercase() }, { "boo!" }).getOrElse { "BOO!" }
         )
     }
 
@@ -91,7 +106,7 @@ class BaseResultTest {
     fun `should be able to apply a side-effect function to a success, leaving the success unchanged`() {
         val success = Success(314)
         var holder = 0
-        success.foreach { value -> holder = value * 2 }
+        success.foreach { holder = it * 2 }
         // the result should remain unchanged
         assertEquals(success, Success(314))
         // the holder is what has changed
@@ -108,9 +123,9 @@ class BaseResultTest {
     @Test
     fun `a safe foreach should be the same as a foreach when no exception is thrown`() {
         var holder = 0
-        Success(314).foreach { value -> holder = value * 2 }
+        Success(314).foreach { holder = it * 2 }
         var safeHolder = 0
-        Success(314).safeForeach { value -> safeHolder = value * 2 }
+        Success(314).safeForeach { safeHolder = it * 2 }
         assertEquals(holder, safeHolder)
     }
 
@@ -172,25 +187,44 @@ class BaseResultTest {
     @Test
     fun `on success forall should apply the supplied predicate on the success value`() {
         data class Person(val name: String)
-        assertTrue(Success(Person("george")).forall { person -> person.name == "george" })
-        assertFalse(Success(Person("george")).forall { person -> person.name == "jenny" })
-        assertTrue(BaseSuccess<Person, String>(Person("george")).forall { person -> person.name == "george" })
-        assertFalse(BaseSuccess<Person, String>(Person("george")).forall { person -> person.name == "jenny" })
+        assertTrue(Success(Person("george")).forall { it.name == "george" })
+        assertFalse(Success(Person("george")).forall { it.name == "jenny" })
+        assertTrue(BaseSuccess<Person, String>(Person("george")).forall { it.name == "george" })
+        assertFalse(BaseSuccess<Person, String>(Person("george")).forall { it.name == "jenny" })
+    }
+
+    @Test
+    fun `on success safe forall should apply the supplied predicate`() {
+        data class Person(val name: String)
+        assertTrue(Success(Person("george")).safeForall { it.name == "george" }.getOrElse { false })
+        assertTrue(Success(Person("george")).safeForall { it.name == "jenny" }.getOrElse { true })
+    }
+
+    @Test
+    fun `on success safe forall should return a failure when the supplied predicate throws an exception`() {
+        data class Person(val name: String)
+        assertEquals(
+            errorMessagesWith("no one"),
+            Success(Person("george"))
+                .safeForall { throw Throwable("no one") }
+                .projection()
+                .getOrElse { emptyErrorMessages() }
+        )
     }
 
     @Test
     fun `on failure forall should return true`() {
-        assertTrue(Failure<Int>("nope").forall { value -> value % 2 == 0 })
-        assertTrue(BaseFailure<Int, String>("nope").forall { value -> value % 2 == 0 })
+        assertTrue(Failure<Int>("nope").forall { it % 2 == 0 })
+        assertTrue(BaseFailure<Int, String>("nope").forall { it % 2 == 0 })
     }
 
     @Test
     fun `on success exists should apply the supplied predicate`() {
         data class Person(val name: String)
-        assertTrue(Success(Person("george")).exists { person -> person.name == "george" })
-        assertFalse(Success(Person("george")).exists { person -> person.name == "jenny" })
-        assertTrue(BaseSuccess<Person, String>(Person("george")).exists { person -> person.name == "george" })
-        assertFalse(BaseSuccess<Person, String>(Person("george")).exists { person -> person.name == "jenny" })
+        assertTrue(Success(Person("george")).exists { it.name == "george" })
+        assertFalse(Success(Person("george")).exists { it.name == "jenny" })
+        assertTrue(BaseSuccess<Person, String>(Person("george")).exists { it.name == "george" })
+        assertFalse(BaseSuccess<Person, String>(Person("george")).exists { it.name == "jenny" })
     }
 
     @Test
@@ -198,15 +232,15 @@ class BaseResultTest {
         data class Person(val name: String, val age: Int)
 
         val result = Success(Person("baby", 2))
-            .flatMap { person ->
-                if (person.age < 3) Success(Person("real baby", 2))
+            .flatMap {
+                if (it.age < 3) Success(Person("real baby", 2))
                 else Failure("not a real baby")
             }
         assertEquals(BaseSuccess<Person, String>(Person("real baby", 2)), result)
 
         val resultBase = BaseSuccess<Person, String>(Person("baby", 2))
-            .flatMap { person ->
-                if (person.age < 3) BaseSuccess(Person("real baby", 2))
+            .flatMap {
+                if (it.age < 3) BaseSuccess(Person("real baby", 2))
                 else BaseFailure("not a real baby")
             }
         assertEquals(BaseSuccess<Person, String>(Person("real baby", 2)), resultBase)
@@ -217,15 +251,15 @@ class BaseResultTest {
         data class Person(val name: String, val age: Int)
 
         val result = Failure<Person>("not a baby")
-            .flatMap { person ->
-                if (person.age < 3) Success(Person("real baby", 2))
+            .flatMap {
+                if (it.age < 3) Success(Person("real baby", 2))
                 else Failure("not a REAL baby")
             }
         assertEquals(Failure<Person>("not a baby"), result)
 
         val resultBase = BaseFailure<Person, String>("not a baby")
-            .flatMap { person ->
-                if (person.age < 3) BaseSuccess(Person("real baby", 2))
+            .flatMap {
+                if (it.age < 3) BaseSuccess(Person("real baby", 2))
                 else BaseFailure("not a REAL baby")
             }
         assertEquals(BaseFailure<Person, String>("not a baby"), resultBase)
@@ -266,7 +300,7 @@ class BaseResultTest {
             listOf("error" to "first error", "warning" to "really an error", "info" to "really? should be an error")
         )
         assertEquals(
-            failure.map { value -> value * 10 },
+            failure.map { it * 10 },
             failure
         )
         assertEquals(
@@ -279,7 +313,7 @@ class BaseResultTest {
     fun `should be able to do a safe map on a success`() {
         assertEquals(
             "YAY!",
-            Success("yay!").safeMap { s -> s.uppercase() }.getOrElse { "boo" }
+            Success("yay!").safeMap { it.uppercase() }.getOrElse { "boo" }
         )
     }
 
