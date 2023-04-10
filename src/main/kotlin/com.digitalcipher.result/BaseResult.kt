@@ -13,21 +13,46 @@ import java.util.Optional
  * approach for representing a series of operations that could fail, without requiring
  * complex conditional structures or appropriately place exception handling.
  *
- * The [BaseResult] is "success-biased", meaning that it operations generally apply to
+ * The [BaseResult] is "success-biased", meaning that its operations generally apply to
  * [BaseSuccess], and pass through [BaseFailure] unchanged. In this way, when an operation,
  * that is part of a series of operations, fails, the downstream operations are not
- * performed. Rather, a [BaseFailure] is returned.
+ * performed. Rather, a [BaseFailure] is passed through from each downstream operation
+ * and returned.
  *
+ * [BaseResult] has generic types for the success and the failure. A failure that is a
+ * collection of error messages is quite common. And therefore, the [Success] and [Failure]
+ * classes provide a partial specialization by using a `List<Pair<String, String>>` as the
+ * type for the [Failure]'s value. The `List<Pair<String, String>>` type provides a
+ * convenient way to specify key-value pairs describing various aspect of the failure.
+ * For example, the key "error" could have a summary message, and additional keys could
+ * represent variables and their associated values.
  */
 sealed class BaseResult<S, F> {
 
+    /**
+     * Returns a failure-biased version of the [BaseResult]. This allows performing
+     * operations on the failure.
+     * @return [BaseFailureProjection], which is a failure-biased version of the [BaseResult]
+     */
     fun projection() = BaseFailureProjection(this)
 
+    /**
+     * Folds the [BaseSuccess] or the [BaseFailure] into a raw type using the provided
+     * [successFn] and [failureFn].
+     * @param successFn A function that maps a success' value of type [S] to type [C]
+     * @param failureFn A function that maps a failure's value of type [F] to type [C]
+     * @return A value of type [C]
+     */
     fun <C> fold(successFn: (success: S) -> C, failureFn: (failure: F) -> C): C = when (this) {
         is BaseSuccess -> successFn(value)
         is BaseFailure -> failureFn(error)
     }
 
+    /**
+     * When the result is a [BaseSuccess] returns a [BaseFailure] of the same type. When
+     * the result is a [BaseFailure] returns a [BaseSuccess] of the same type.
+     * @return A [BaseResult] with success type [F] and failure type [S]
+     */
     fun swap(): BaseResult<F, S> = when (this) {
         is BaseSuccess -> BaseFailure(value)
         is BaseFailure -> BaseSuccess(error)
@@ -107,15 +132,9 @@ fun <S> Failure<S>.addError(name: String, value: String) = Failure<S>(error.add(
 fun <S> FailureProjection<S>.containsDeep(elem: Pair<String, String>): Boolean =
     if (result is BaseFailure) result.error.contains(elem) else false
 
-fun <S, S1> Success<S>.safeMap(fn: (S) -> S1): Result<S1> =
-    safeResultFn(
-        { map(fn) },
-        { e -> listOf(Pair("error", e.message ?: "")) }
-    )
-
 fun <S, C> Success<S>.safeFold(
     successFn: (success: S) -> C,
-    failureFn: (failure: List<Pair<String, String>>) -> C
+    failureFn: (failure: ErrorMessages) -> C
 ): Result<C> =
     safeResultFn(
         { Success(fold(successFn, failureFn)) },
@@ -132,6 +151,24 @@ fun <S> Success<S>.safeForall(predicate: (S) -> Boolean): Result<Boolean> =
     safeResultFn(
         { Success(forall(predicate)) },
         { e -> errorMessagesWith(e.message ?: "") }
+    )
+
+fun <S> Success<S>.safeExists(predicate: (S) -> Boolean): Result<Boolean> =
+    safeResultFn(
+        { Success(exists(predicate)) },
+        { e -> errorMessagesWith(e.message ?: "") }
+    )
+
+fun <S, S1> Success<S>.safeFlatMap(fn: (S) -> Result<S1>): Result<S1> =
+    safeResultFn(
+        { flatMap(fn) },
+        { e -> errorMessagesWith(e.message ?: "") }
+    )
+
+fun <S, S1> Success<S>.safeMap(fn: (S) -> S1): Result<S1> =
+    safeResultFn(
+        { map(fn) },
+        { e -> listOf(Pair("error", e.message ?: "")) }
     )
 
 /**

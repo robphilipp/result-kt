@@ -228,6 +228,19 @@ class BaseResultTest {
     }
 
     @Test
+    fun `safe exists should return a failure when the predicate throws an exception`() {
+        data class Person(val name: String)
+        assertTrue(Success(Person("george")).safeExists { it.name == "george" }.getOrElse { false })
+        assertFalse(Success(Person("george")).safeExists { it.name == "jenny" }.getOrElse { true })
+        assertEquals(
+            errorMessagesWith("oops!"),
+            Success(Person("george"))
+                .safeExists { throw Throwable("oops!") }
+                .projection()
+                .getOrElse { emptyErrorMessages() })
+    }
+
+    @Test
     fun `should be able to flat map a success`() {
         data class Person(val name: String, val age: Int)
 
@@ -244,6 +257,19 @@ class BaseResultTest {
                 else BaseFailure("not a real baby")
             }
         assertEquals(BaseSuccess<Person, String>(Person("real baby", 2)), resultBase)
+    }
+
+    @Test
+    fun `safe flatMap should return a failure when map function throws and exception`() {
+        data class Person(val name: String, val age: Int)
+
+        assertEquals(
+            errorMessagesWith("badly"),
+            Success(Person("binny", 12))
+                .safeFlatMap<Person, String> { throw Throwable("badly") }
+                .projection()
+                .getOrElse { emptyErrorMessages() }
+        )
     }
 
     @Test
@@ -310,7 +336,7 @@ class BaseResultTest {
     }
 
     @Test
-    fun `map_should_work_on_success_but_not_failure`() {
+    fun `map should work on success but not failure`() {
         assertEquals(
             314,
             Success(3.14).map { it * 10 }.getOrElse { 0.0 }
