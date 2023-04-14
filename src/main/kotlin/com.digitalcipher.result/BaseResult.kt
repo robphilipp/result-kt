@@ -27,7 +27,7 @@ import java.util.Optional
  * For example, the key "error" could have a summary message, and additional keys could
  * represent variables and their associated values.
  */
-sealed class BaseResult<S, F> {
+sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F)? = null) {
 
     /**
      * Returns a failure-biased version of the [BaseResult]. This allows performing
@@ -47,6 +47,19 @@ sealed class BaseResult<S, F> {
         is BaseSuccess -> successFn(value)
         is BaseFailure -> failureFn(error)
     }
+
+    fun <C> safeFold(
+        successFn: (success: S) -> C,
+        failureFn: (failure: F) -> C
+    ): BaseResult<C, F> =
+        if (failureProducer != null)
+            safeResultFn(
+                { BaseSuccess(fold(successFn, failureFn), failureProducer) },
+                { e -> failureProducer.invoke(e) }
+            )
+        else
+            BaseSuccess(fold(successFn, failureFn))
+
 
     /**
      * When the result is a [BaseSuccess] returns a [BaseFailure] of the same type. When
@@ -109,7 +122,10 @@ sealed class BaseResult<S, F> {
     fun isFailure(): Boolean = this is BaseFailure
 }
 
-data class BaseSuccess<S, F>(val value: S) : BaseResult<S, F>()
+data class BaseSuccess<S, F>(
+    val value: S,
+    private val failureProducer: ((e: Throwable?) -> F)? = null
+) : BaseResult<S, F>(failureProducer)
 
 data class BaseFailure<S, F>(val error: F) : BaseResult<S, F>()
 
