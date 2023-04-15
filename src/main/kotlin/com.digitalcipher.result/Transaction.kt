@@ -12,9 +12,9 @@ fun <S, S1> BaseResult<S, List<Pair<String, String>>>.transaction(
         try {
             if (transactional(value)) {
                 if (result.isSuccess())
-                    commitFunction(value).flatMap { result }
+                    commitFunction(value).flatMap({ _ -> result })
                 else
-                    rollbackFunction(value).flatMap { result }
+                    rollbackFunction(value).flatMap({ _ -> result })
             } else {
                 result
             }
@@ -26,11 +26,11 @@ fun <S, S1> BaseResult<S, List<Pair<String, String>>>.transaction(
                     "the transaction"
             try {
                 rollbackFunction(value)
-                    .flatMap {
+                    .flatMap({
                         val messages = listOf("error" to (e.message ?: "[no message]")) +
                                 (if (result is BaseFailure) result.error else emptyList())
                         BaseFailure(messages)
-                    }
+                    })
             } catch (e: Throwable) {
                 BaseFailure(listOf("error" to "$message, and then again on the final rollback" + e.message))
             }

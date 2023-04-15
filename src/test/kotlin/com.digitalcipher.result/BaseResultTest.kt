@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Assertions.*
 class BaseResultTest {
 
     @Test
-    fun `should be able to fold success for base type`() {
+    fun `should be able to do an unsafe fold success for base type`() {
         assertEquals(
             "YAY!",
             BaseSuccess<String, Throwable>("yay!").unsafeFold({ it.uppercase() }, { Throwable("damn") })
@@ -15,10 +15,30 @@ class BaseResultTest {
     }
 
     @Test
-    fun `should be able to fold failure for base type`() {
+    fun `should be able to fold success for base type`() {
+        assertEquals(
+            "YAY!",
+            BaseSuccess<String, Throwable>("yay!")
+                .fold({ it.uppercase() }, { Throwable("damn") })
+                .getOrElse { "boo!" }
+        )
+    }
+
+    @Test
+    fun `should be able to an unsafe fold failure for base type`() {
         assertEquals(
             Throwable("BOO").message,
             BaseFailure<String, Throwable>(Throwable("BOO")).unsafeFold({ it.uppercase() }, { it.message })
+        )
+    }
+
+    @Test
+    fun `should be able to fold failure for base type`() {
+        assertEquals(
+            Throwable("BOO").message,
+            BaseFailure<String, Throwable>(Throwable("BOO"))
+                .fold({ it.uppercase() }, { it.message })
+                .getOrElse { "damn" }
         )
     }
 
@@ -34,18 +54,34 @@ class BaseResultTest {
     }
 
     @Test
+    fun `should be able to do an unsafe fold success and failures`() {
+        assertEquals(
+            "YAY!",
+            Success("yay!").unsafeFold({ it.uppercase() }, { it[0].second.lowercase() })
+        )
+        assertEquals(
+            listOf(Pair("error", "BOO")),
+            Failure<String>("BOO").unsafeFold({ it.uppercase() }, { it })
+        )
+        assertEquals(
+            "boo",
+            Failure<String>("BOO").unsafeFold({ it.uppercase() }, { it[0].second.lowercase() })
+        )
+    }
+
+    @Test
     fun `should be able fold success and failures`() {
         assertEquals(
-            Success("yay!").unsafeFold({ it.uppercase() }, { it[0].second.lowercase() }),
-            "YAY!"
+            "YAY!",
+            Success("yay!").fold({ it.uppercase() }, { it[0].second.lowercase() }).getOrElse { "boo!" }
         )
         assertEquals(
-            Failure<String>("BOO").unsafeFold({ it.uppercase() }, { it }),
-            listOf(Pair("error", "BOO"))
+            listOf(Pair("error", "BOO")),
+            Failure<String>("BOO").fold({ it.uppercase() }, { it }).getOrElse { "hmm?" }
         )
         assertEquals(
-            Failure<String>("BOO").unsafeFold({ it.uppercase() }, { it[0].second.lowercase() }),
-            "boo"
+            "boo",
+            Failure<String>("BOO").fold({ it.uppercase() }, { it[0].second.lowercase() }).getOrElse { "damn!" }
         )
     }
 
@@ -60,7 +96,7 @@ class BaseResultTest {
     fun `should be able to throw an exception in a safe-fold and get back a result`() {
         assertEquals(
             Failure<String>(errorMessagesWith("oops!")),
-            Success("yay!").fold({ throw Throwable("oops!") }, { "damn!" })
+            Success("yay!").fold({ throw Throwable("oops!") }, { "damn!" }, { errorMessagesWith(it?.message ?: "") })
         )
     }
 
@@ -92,9 +128,10 @@ class BaseResultTest {
     @Test
     fun `should be able to do a safe fold for a base result`() {
         assertEquals(
-            BaseSuccess<String, String>("YAY!"),
+            "YAY!",
             BaseSuccess("yay!") { e -> e?.message ?: "boo!" }
                 .fold({ it.uppercase() }, { "BOO!" })
+                .getOrElse { "damn!" }
         )
     }
 
@@ -223,7 +260,7 @@ class BaseResultTest {
     fun `on success safe forall should apply the supplied predicate`() {
         data class Person(val name: String)
         assertTrue(Success(Person("george")).safeForall { it.name == "george" }.getOrElse { false })
-        assertTrue(Success(Person("george")).safeForall { it.name == "jenny" }.getOrElse { true })
+        assertFalse(Success(Person("george")).safeForall { it.name == "jenny" }.getOrElse { true })
     }
 
     @Test
@@ -271,17 +308,17 @@ class BaseResultTest {
         data class Person(val name: String, val age: Int)
 
         val result = Success(Person("baby", 2))
-            .flatMap {
+            .flatMap({
                 if (it.age < 3) Success(Person("real baby", 2))
                 else Failure("not a real baby")
-            }
+            })
         assertEquals(BaseSuccess<Person, String>(Person("real baby", 2)), result)
 
         val resultBase = BaseSuccess<Person, String>(Person("baby", 2))
-            .flatMap {
+            .flatMap({
                 if (it.age < 3) BaseSuccess(Person("real baby", 2))
                 else BaseFailure("not a real baby")
-            }
+            })
         assertEquals(BaseSuccess<Person, String>(Person("real baby", 2)), resultBase)
     }
 
@@ -303,17 +340,17 @@ class BaseResultTest {
         data class Person(val name: String, val age: Int)
 
         val result = Failure<Person>("not a baby")
-            .flatMap {
+            .flatMap({
                 if (it.age < 3) Success(Person("real baby", 2))
                 else Failure("not a REAL baby")
-            }
+            })
         assertEquals(Failure<Person>("not a baby"), result)
 
         val resultBase = BaseFailure<Person, String>("not a baby")
-            .flatMap {
+            .flatMap({
                 if (it.age < 3) BaseSuccess(Person("real baby", 2))
                 else BaseFailure("not a REAL baby")
-            }
+            })
         assertEquals(BaseFailure<Person, String>("not a baby"), resultBase)
     }
 
@@ -364,8 +401,8 @@ class BaseResultTest {
     @Test
     fun `map should work on success but not failure`() {
         assertEquals(
-            314,
-            Success(3.14).map { it * 10 }.getOrElse { 0.0 }
+            31400,
+            Success(314).map { it * 100 }.getOrElse { 0 }
         )
         assertEquals(
             errorMessagesWith("oops!"),

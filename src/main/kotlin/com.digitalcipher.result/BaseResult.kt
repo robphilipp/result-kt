@@ -29,6 +29,13 @@ import java.util.Optional
  */
 sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F)? = null) {
 
+    private fun copyWith(producer: ((e: Throwable?) -> F)? = null): BaseResult<S, F> = when(this) {
+        is BaseSuccess -> BaseSuccess(value, producer)
+        is BaseFailure -> BaseFailure(error)
+    }
+
+    fun isSafe() = failureProducer != null
+
     /**
      * Returns a failure-biased version of the [BaseResult]. This allows performing
      * operations on the failure.
@@ -50,16 +57,18 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
 
     fun <C> fold(
         successFn: (success: S) -> C,
-        failureFn: (failure: F) -> C
+        failureFn: (failure: F) -> C,
+        producer: ((e: Throwable?) -> F)? = null
     ): BaseResult<C, F> =
-        if (failureProducer != null)
+        if (failureProducer == null && producer == null)
+            BaseSuccess(unsafeFold(successFn, failureFn))
+        else {
+            val prod  = (producer ?: failureProducer) as (e: Throwable?) -> F
             safeResultFn(
                 { BaseSuccess(unsafeFold(successFn, failureFn), failureProducer) },
-                { e -> failureProducer.invoke(e) }
+                { e -> prod(e) }
             )
-        else
-            BaseSuccess(unsafeFold(successFn, failureFn))
-
+        }
 
     /**
      * When the result is a [BaseSuccess] returns a [BaseFailure] of the same type. When
@@ -94,10 +103,21 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
 
     fun exists(predicate: (S) -> Boolean): Boolean = this is BaseSuccess && predicate(value)
 
-    fun <S1> flatMap(fn: (S) -> BaseResult<S1, F>): BaseResult<S1, F> = when (this) {
+    fun <S1> unsafeFlatMap(fn: (S) -> BaseResult<S1, F>): BaseResult<S1, F> = when (this) {
         is BaseSuccess -> fn(value)
         is BaseFailure -> BaseFailure(error)
     }
+
+    fun <S1> flatMap(fn: (S) -> BaseResult<S1, F>, producer: ((e: Throwable?) -> F)? = null): BaseResult<S1, F> =
+        if (failureProducer == null && producer == null)
+            unsafeFlatMap(fn)
+        else {
+            val prod  = (producer ?: failureProducer) as (e: Throwable?) -> F
+            safeResultFn(
+                { unsafeFlatMap(fn).copyWith(prod) },
+                { e -> prod(e) }
+            )
+        }
 
     @Suppress("UNCHECKED_CAST")
     fun <S1> flatten(): BaseResult<S1, F> =
