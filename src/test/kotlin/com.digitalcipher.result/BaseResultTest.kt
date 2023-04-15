@@ -10,7 +10,7 @@ class BaseResultTest {
     fun `should be able to fold success for base type`() {
         assertEquals(
             "YAY!",
-            BaseSuccess<String, Throwable>("yay!").fold({ it.uppercase() }, { Throwable("damn") })
+            BaseSuccess<String, Throwable>("yay!").unsafeFold({ it.uppercase() }, { Throwable("damn") })
         )
     }
 
@@ -18,7 +18,7 @@ class BaseResultTest {
     fun `should be able to fold failure for base type`() {
         assertEquals(
             Throwable("BOO").message,
-            BaseFailure<String, Throwable>(Throwable("BOO")).fold({ it.uppercase() }, { it.message })
+            BaseFailure<String, Throwable>(Throwable("BOO")).unsafeFold({ it.uppercase() }, { it.message })
         )
     }
 
@@ -36,15 +36,15 @@ class BaseResultTest {
     @Test
     fun `should be able fold success and failures`() {
         assertEquals(
-            Success("yay!").fold({ it.uppercase() }, { it[0].second.lowercase() }),
+            Success("yay!").unsafeFold({ it.uppercase() }, { it[0].second.lowercase() }),
             "YAY!"
         )
         assertEquals(
-            Failure<String>("BOO").fold({ it.uppercase() }, { it }),
+            Failure<String>("BOO").unsafeFold({ it.uppercase() }, { it }),
             listOf(Pair("error", "BOO"))
         )
         assertEquals(
-            Failure<String>("BOO").fold({ it.uppercase() }, { it[0].second.lowercase() }),
+            Failure<String>("BOO").unsafeFold({ it.uppercase() }, { it[0].second.lowercase() }),
             "boo"
         )
     }
@@ -52,7 +52,7 @@ class BaseResultTest {
     @Test
     fun `should be able to throw an exception in a fold and get back an exception`() {
         assertThrows(Throwable::class.java) {
-            Success("yay!").fold({ throw Throwable("oops") }, { it[0].second.lowercase() })
+            Success("yay!").unsafeFold({ throw Throwable("oops") }, { it[0].second.lowercase() })
         }
     }
 
@@ -60,7 +60,7 @@ class BaseResultTest {
     fun `should be able to throw an exception in a safe-fold and get back a result`() {
         assertEquals(
             Failure<String>(errorMessagesWith("oops!")),
-            Success("yay!").safeFold({ throw Throwable("oops!") }, { "damn!" })
+            Success("yay!").fold({ throw Throwable("oops!") }, { "damn!" })
         )
     }
 
@@ -68,7 +68,7 @@ class BaseResultTest {
     fun `safe-fold should return a successful result`() {
         assertEquals(
             "YAY!",
-            Success("yay!").safeFold({ it.uppercase() }, { "boo!" }).getOrElse { "BOO!" }
+            Success("yay!").fold({ it.uppercase() }, { "boo!" }).getOrElse { "BOO!" }
         )
     }
 
@@ -76,7 +76,7 @@ class BaseResultTest {
     fun `safe-fold should return a successful base result when no failure producer is supplied`() {
         assertEquals(
             "YAY!",
-            BaseSuccess<String, String>("yay!").safeFold({ it.uppercase() }, { "boo!" }).getOrElse { "BOO!" }
+            BaseSuccess<String, String>("yay!").fold({ it.uppercase() }, { "boo!" }).getOrElse { "BOO!" }
         )
     }
 
@@ -85,7 +85,7 @@ class BaseResultTest {
         assertEquals(
             BaseFailure<String, String>("oops!"),
             BaseSuccess("yay!") { e -> e?.message ?: "boo!" }
-                .safeFold({ throw Throwable("oops!") }, { "damn!" })
+                .fold({ throw Throwable("oops!") }, { "damn!" })
         )
     }
 
@@ -94,7 +94,7 @@ class BaseResultTest {
         assertEquals(
             BaseSuccess<String, String>("YAY!"),
             BaseSuccess("yay!") { e -> e?.message ?: "boo!" }
-                .safeFold({ it.uppercase() }, { "BOO!" })
+                .fold({ it.uppercase() }, { "BOO!" })
         )
     }
 

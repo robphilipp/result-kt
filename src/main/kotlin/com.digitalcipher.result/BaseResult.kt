@@ -43,22 +43,22 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
      * @param failureFn A function that maps a failure's value of type [F] to type [C]
      * @return A value of type [C]
      */
-    fun <C> fold(successFn: (success: S) -> C, failureFn: (failure: F) -> C): C = when (this) {
+    fun <C> unsafeFold(successFn: (success: S) -> C, failureFn: (failure: F) -> C): C = when (this) {
         is BaseSuccess -> successFn(value)
         is BaseFailure -> failureFn(error)
     }
 
-    fun <C> safeFold(
+    fun <C> fold(
         successFn: (success: S) -> C,
         failureFn: (failure: F) -> C
     ): BaseResult<C, F> =
         if (failureProducer != null)
             safeResultFn(
-                { BaseSuccess(fold(successFn, failureFn), failureProducer) },
+                { BaseSuccess(unsafeFold(successFn, failureFn), failureProducer) },
                 { e -> failureProducer.invoke(e) }
             )
         else
-            BaseSuccess(fold(successFn, failureFn))
+            BaseSuccess(unsafeFold(successFn, failureFn))
 
 
     /**
@@ -153,7 +153,7 @@ fun <S, C> Success<S>.safeFold(
     failureFn: (failure: ErrorMessages) -> C
 ): Result<C> =
     safeResultFn(
-        { Success(fold(successFn, failureFn)) },
+        { Success(unsafeFold(successFn, failureFn)) },
         { e -> errorMessagesWith(e.message ?: "") }
     )
 
