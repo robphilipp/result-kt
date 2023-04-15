@@ -3,7 +3,8 @@ package com.digitalcipher.result
 import java.util.Optional
 
 /**
- * A success-biased result class returned from functions whose operations can fail.
+ * A *success-biased* result class that can be returned from functions, whose operations
+ * can fail, to signify that failures must be handled by the calling function.
  *
  * Generally, a result provides a useful abstraction to denote operations that can fail.
  * When functions representing such operations return a [BaseResult], the caller of that
@@ -13,9 +14,9 @@ import java.util.Optional
  * approach for representing a series of operations that could fail, without requiring
  * complex conditional structures or appropriately place exception handling.
  *
- * The [BaseResult] is "success-biased", meaning that its operations generally apply to
- * [BaseSuccess], and pass through [BaseFailure] unchanged. In this way, when an operation,
- * that is part of a series of operations, fails, the downstream operations are not
+ * The [BaseResult] is *success-biased*, meaning that its operations generally apply to
+ * [BaseSuccess], and pass through [BaseFailure] unchanged. In this way, when an operation
+ * fails, that is part of a series of operations, the downstream operations are not
  * performed. Rather, a [BaseFailure] is passed through from each downstream operation
  * and returned.
  *
@@ -26,13 +27,32 @@ import java.util.Optional
  * convenient way to specify key-value pairs describing various aspect of the failure.
  * For example, the key "error" could have a summary message, and additional keys could
  * represent variables and their associated values.
+ *
+ * Functions that wrap exceptions and return a [BaseResult] when an exception is thrown
+ * in a caller-specified lambda are considered *safe*. Functions that do NOT wrap exceptions,
+ * but rather pass them through to the calling function are considered *unsafe*.
+ *
+ * A *safety chain* refers to a chain of **safe** function invocations. For example, when
+ * the [BaseResult] is provided with a [failureProducer], then it is a *safe* result, and
+ * all of its function will be *safe* functions. However, there are some functions that
+ * break the *safety chain*. The [swap] function is an example of this. A [failureProducer]
+ * that was supplied to the [BaseResult] is no longer (necessarily) valid for the
+ * [BaseResult] because the success type has been switched with the failure type. To
+ * prevent the [swap] function from breaking the *safety chain* you must provide a new
+ * [failureProducer] that contains the correct types. When no [failureProducer] is supplied
+ * to the [swap] function, it is said to *break* the safety chain, because subsequent, chained
+ * functions are no longer guaranteed to be safe.
+ *
+ * @param failureProducer An optional function that produces a failure from a given [Throwable].
+ * When specified, this [BaseResult] is *safe*.
  */
 sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F)? = null) {
 
-    private fun copyWith(producer: ((e: Throwable?) -> F)? = null): BaseResult<S, F> = when(this) {
-        is BaseSuccess -> BaseSuccess(value, producer)
-        is BaseFailure -> BaseFailure(error)
-    }
+    private fun copyWith(producer: ((e: Throwable?) -> F)? = null): BaseResult<S, F> =
+        when (this) {
+            is BaseSuccess -> BaseSuccess(value, producer)
+            is BaseFailure -> BaseFailure(error)
+        }
 
     fun isSafe() = failureProducer != null
 
@@ -44,26 +64,51 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
     fun projection() = BaseFailureProjection(this)
 
     /**
+     * **Unsafe**
+     *
      * Folds the [BaseSuccess] or the [BaseFailure] into a raw type using the provided
-     * [successFn] and [failureFn].
+     * [successFn] and [failureFn]. The function does not wrap exceptions in the
+     * [successFn] or [failureFn], but rather passes through any exceptions.
      * @param successFn A function that maps a success' value of type [S] to type [C]
      * @param failureFn A function that maps a failure's value of type [F] to type [C]
      * @return A value of type [C]
+     * @see fold
      */
-    fun <C> unsafeFold(successFn: (success: S) -> C, failureFn: (failure: F) -> C): C = when (this) {
-        is BaseSuccess -> successFn(value)
-        is BaseFailure -> failureFn(error)
-    }
+    fun <C> unsafeFold(successFn: (success: S) -> C, failureFn: (failure: F) -> C): C =
+        when (this) {
+            is BaseSuccess -> successFn(value)
+            is BaseFailure -> failureFn(error)
+        }
 
+    /**
+     * **Safe**
+     *
+     * Folds the [BaseSuccess] or the [BaseFailure] into a [BaseResult] using the provided
+     * [successFn] and [failureFn]. When the [producer] is specified, then the [fold] function
+     * is **safe**, wrapping exceptions that may have been thrown in the [successFn] or
+     * [failureFn] and always returning a [BaseResult]. When the [producer] function is not
+     * specified (or is null), then the [fold] function does not wrap exceptions thrown by the
+     * [successFn] or [failureFn], but rather passes through any exceptions.
+     * @param successFn A function that maps a success' value of type [S] to type [C]
+     * @param failureFn A function that maps a failure's value of type [F] to type [C]
+     * @param producer An optional function that produces a failure from a given [Throwable]. When
+     * specified, the [fold] function is **safe**, wrapping exceptions that may have been thrown
+     * in the [successFn] or [failureFn] and always returning a [BaseResult].
+     * @return A value of type [C].
+     * @see unsafeFold
+     */
     fun <C> fold(
         successFn: (success: S) -> C,
         failureFn: (failure: F) -> C,
         producer: ((e: Throwable?) -> F)? = null
     ): BaseResult<C, F> =
-        if (failureProducer == null && producer == null)
+        // not a safe fold, so just do the unsafe version
+        if (failureProducer == null && producer == null) {
             BaseSuccess(unsafeFold(successFn, failureFn))
-        else {
-            val prod  = (producer ?: failureProducer) as (e: Throwable?) -> F
+        } else {
+            // the failure producer has been set at the object-level or as a function
+            //  argument, so cast it to a non-null
+            val prod = (producer ?: failureProducer) as (e: Throwable?) -> F
             safeResultFn(
                 { BaseSuccess(unsafeFold(successFn, failureFn), failureProducer) },
                 { e -> prod(e) }
@@ -71,14 +116,20 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
         }
 
     /**
+     * **Safe**
+     *
      * When the result is a [BaseSuccess] returns a [BaseFailure] of the same type. When
      * the result is a [BaseFailure] returns a [BaseSuccess] of the same type.
+     *
+     * **Warning**: this function breaks the safety chain unless a new failure producer
+     * is specified.
      * @return A [BaseResult] with success type [F] and failure type [S]
      */
-    fun swap(): BaseResult<F, S> = when (this) {
-        is BaseSuccess -> BaseFailure(value)
-        is BaseFailure -> BaseSuccess(error)
-    }
+    fun swap(producer: ((e: Throwable?) -> S)? = null): BaseResult<F, S> =
+        when (this) {
+            is BaseSuccess -> BaseFailure(value)
+            is BaseFailure -> BaseSuccess(error, producer)
+        }
 
     fun <U> foreach(effectFn: (success: S) -> U) {
         if (this is BaseSuccess) effectFn(value)
@@ -112,7 +163,7 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
         if (failureProducer == null && producer == null)
             unsafeFlatMap(fn)
         else {
-            val prod  = (producer ?: failureProducer) as (e: Throwable?) -> F
+            val prod = (producer ?: failureProducer) as (e: Throwable?) -> F
             safeResultFn(
                 { unsafeFlatMap(fn).copyWith(prod) },
                 { e -> prod(e) }
