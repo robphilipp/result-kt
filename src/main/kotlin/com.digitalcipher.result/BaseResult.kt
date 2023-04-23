@@ -48,20 +48,30 @@ import java.util.Optional
  */
 sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F)? = null) {
 
+    /**
+     * [copyWith] is mainly used to create an enriched version of the [BaseResult]. When
+     * specifying a [producer] the [BaseResult] will use the *safe* methods.
+     * @param producer An optional failure producer that signifies the result to
+     * use the *safe* operations.
+     * @return A copy of the [BaseResult], possibly enriched with a [failureProducer].
+     */
     private fun copyWith(producer: ((e: Throwable?) -> F)? = null): BaseResult<S, F> =
         when (this) {
             is BaseSuccess -> BaseSuccess(value, producer)
             is BaseFailure -> BaseFailure(error)
         }
 
-    fun isSafe() = failureProducer != null
+    /**
+     * @return `true` if this [BaseResult] is using *safe* operations; `false` otherwise.
+     */
+    fun isSafe(): Boolean = failureProducer != null
 
     /**
      * Returns a failure-biased version of the [BaseResult]. This allows performing
      * operations on the failure.
      * @return [BaseFailureProjection], which is a failure-biased version of the [BaseResult]
      */
-    fun projection() = BaseFailureProjection(this)
+    fun projection(): BaseFailureProjection<S, F> = BaseFailureProjection(this)
 
     /**
      * **Unsafe**
@@ -110,7 +120,7 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
             //  argument, so cast it to a non-null
             val prod = (producer ?: failureProducer) as (e: Throwable?) -> F
             safeResultFn(
-                { BaseSuccess(unsafeFold(successFn, failureFn), failureProducer) },
+                { BaseSuccess(unsafeFold(successFn, failureFn), prod) },
                 { e -> prod(e) }
             )
         }
@@ -131,9 +141,44 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
             is BaseFailure -> BaseSuccess(error, producer)
         }
 
-    fun <U> foreach(effectFn: (success: S) -> U) {
-        if (this is BaseSuccess) effectFn(value)
+    /**
+     * **Has side effects**
+     *
+     * The [unsafeForeach] method applies the specified [effectFn] to the [BaseResult] value
+     * if the [BaseResult] is a [BaseSuccess]. Otherwise,
+     * when the [BaseResult] is a not a [BaseSuccess], does nothing.
+     * @param effectFn The function to apply to the success value
+     */
+    fun <U> unsafeForeach(effectFn: (success: S) -> U) {
+        if (this is BaseSuccess) BaseSuccess<U, F>(effectFn(value))
     }
+
+    /**
+     * *Safe*
+     *
+     * The [foreach] method applies the specified [effectFn] to the [BaseResult] value if it is
+     * a success. When the [BaseResult] value is a failure, then does nothing.
+     *
+     * When the [BaseResult] has a [failureProducer] or a [producer] was specified in the [foreach]
+     * method, this is a *safe* operation. The [producer] specified in the [foreach] function takes
+     * precedence over the [failureProducer].
+     *
+     * @param effectFn The function to apply to the success value
+     * @param producer An optional function that produces a failure from a given [Throwable]. When
+     * specified, the [foreach] function is **safe**, wrapping exceptions that may have been thrown
+     * in the [effectFn] and always returning a [BaseResult].
+     * @return A [BaseResult] where the success type is [Unit].
+     */
+    fun <U> foreach(effectFn: (success: S) -> U, producer: ((e: Throwable?) -> F)? = null): BaseResult<Unit, F> =
+        if (failureProducer == null && producer == null) {
+            BaseSuccess<Unit, F>(unsafeForeach(effectFn))
+        } else {
+            val prod = (producer ?: failureProducer) as (e: Throwable?) -> F
+            safeResultFn(
+                { BaseSuccess(unsafeForeach(effectFn), prod)},
+                { e -> prod(e) }
+            )
+        }
 
     fun getOrElse(supplier: () -> S): S = when (this) {
         is BaseSuccess -> value
@@ -230,7 +275,7 @@ fun <S, C> Success<S>.safeFold(
 
 fun <S, U> Success<S>.safeForeach(effectFn: (success: S) -> U): Result<Unit> =
     safeResultFn(
-        { Success(foreach(effectFn)) },
+        { Success(unsafeForeach(effectFn)) },
         { e -> errorMessagesWith(e.message ?: "") }
     )
 

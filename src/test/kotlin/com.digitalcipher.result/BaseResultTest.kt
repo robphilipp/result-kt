@@ -169,7 +169,7 @@ class BaseResultTest {
     fun `should be able to apply a side-effect function to a success, leaving the success unchanged`() {
         val success = Success(314)
         var holder = 0
-        success.foreach { holder = it * 2 }
+        success.foreach({ holder = it * 2 })
         // the result should remain unchanged
         assertEquals(success, Success(314))
         // the holder is what has changed
@@ -179,14 +179,14 @@ class BaseResultTest {
     @Test
     fun `a foreach should throw an exception of the lambda passed to it throws an exception`() {
         assertThrows(Throwable::class.java) {
-            Success(314).foreach { throw Throwable("ouch!") }
+            Success(314).foreach( { throw Throwable("ouch!") })
         }
     }
 
     @Test
     fun `a safe foreach should be the same as a foreach when no exception is thrown`() {
         var holder = 0
-        Success(314).foreach { holder = it * 2 }
+        Success(314).foreach( { holder = it * 2 })
         var safeHolder = 0
         Success(314).safeForeach { safeHolder = it * 2 }
         assertEquals(holder, safeHolder)
