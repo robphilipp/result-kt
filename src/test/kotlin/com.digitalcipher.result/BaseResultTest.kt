@@ -20,7 +20,7 @@ class BaseResultTest {
             "YAY!",
             BaseSuccess<String, Throwable>("yay!")
                 .fold({ it.uppercase() }, { Throwable("damn") })
-                .getOrElse { "boo!" }
+                .unwrap { "boo!" }
         )
     }
 
@@ -38,7 +38,7 @@ class BaseResultTest {
             Throwable("BOO").message,
             BaseFailure<String, Throwable>(Throwable("BOO"))
                 .fold({ it.uppercase() }, { it.message })
-                .getOrElse { "damn" }
+                .unwrap { "damn" }
         )
     }
 
@@ -73,15 +73,15 @@ class BaseResultTest {
     fun `should be able fold success and failures`() {
         assertEquals(
             "YAY!",
-            Success("yay!").fold({ it.uppercase() }, { it[0].second.lowercase() }).getOrElse { "boo!" }
+            Success("yay!").fold({ it.uppercase() }, { it[0].second.lowercase() }).unwrap { "boo!" }
         )
         assertEquals(
             listOf(Pair("error", "BOO")),
-            Failure<String>("BOO").fold({ it.uppercase() }, { it }).getOrElse { "hmm?" }
+            Failure<String>("BOO").fold({ it.uppercase() }, { it }).unwrap { "hmm?" }
         )
         assertEquals(
             "boo",
-            Failure<String>("BOO").fold({ it.uppercase() }, { it[0].second.lowercase() }).getOrElse { "damn!" }
+            Failure<String>("BOO").fold({ it.uppercase() }, { it[0].second.lowercase() }).unwrap { "damn!" }
         )
     }
 
@@ -104,7 +104,7 @@ class BaseResultTest {
     fun `safe-fold should return a successful result`() {
         assertEquals(
             "YAY!",
-            Success("yay!").fold({ it.uppercase() }, { "boo!" }).getOrElse { "BOO!" }
+            Success("yay!").fold({ it.uppercase() }, { "boo!" }).unwrap { "BOO!" }
         )
     }
 
@@ -112,7 +112,7 @@ class BaseResultTest {
     fun `safe-fold should return a successful base result when no failure producer is supplied`() {
         assertEquals(
             "YAY!",
-            BaseSuccess<String, String>("yay!").fold({ it.uppercase() }, { "boo!" }).getOrElse { "BOO!" }
+            BaseSuccess<String, String>("yay!").fold({ it.uppercase() }, { "boo!" }).unwrap { "BOO!" }
         )
     }
 
@@ -131,7 +131,7 @@ class BaseResultTest {
             "YAY!",
             BaseSuccess("yay!") { e -> e?.message ?: "boo!" }
                 .fold({ it.uppercase() }, { "BOO!" })
-                .getOrElse { "damn!" }
+                .unwrap { "damn!" }
         )
     }
 
@@ -205,10 +205,10 @@ class BaseResultTest {
 
     @Test
     fun `should be able to get a value on success and the specified default on failure`() {
-        assertEquals("yay!", Success("yay!").getOrElse { "boo" })
-        assertEquals("boo", Failure<String>("yay!").getOrElse { "boo" })
-        assertEquals("yay!", BaseSuccess<String, String>("yay!").getOrElse { "boo" })
-        assertEquals("boo", BaseFailure<String, String>("yay!").getOrElse { "boo" })
+        assertEquals("yay!", Success("yay!").unwrap { "boo" })
+        assertEquals("boo", Failure<String>("yay!").unwrap { "boo" })
+        assertEquals("yay!", BaseSuccess<String, String>("yay!").unwrap { "boo" })
+        assertEquals("boo", BaseFailure<String, String>("yay!").unwrap { "boo" })
     }
 
     @Test
@@ -259,8 +259,8 @@ class BaseResultTest {
     @Test
     fun `on success safe forall should apply the supplied predicate`() {
         data class Person(val name: String)
-        assertTrue(Success(Person("george")).safeForall { it.name == "george" }.getOrElse { false })
-        assertFalse(Success(Person("george")).safeForall { it.name == "jenny" }.getOrElse { true })
+        assertTrue(Success(Person("george")).safeForall { it.name == "george" }.unwrap { false })
+        assertFalse(Success(Person("george")).safeForall { it.name == "jenny" }.unwrap { true })
     }
 
     @Test
@@ -293,8 +293,8 @@ class BaseResultTest {
     @Test
     fun `safe exists should return a failure when the predicate throws an exception`() {
         data class Person(val name: String)
-        assertTrue(Success(Person("george")).safeExists { it.name == "george" }.getOrElse { false })
-        assertFalse(Success(Person("george")).safeExists { it.name == "jenny" }.getOrElse { true })
+        assertTrue(Success(Person("george")).safeExists { it.name == "george" }.unwrap { false })
+        assertFalse(Success(Person("george")).safeExists { it.name == "jenny" }.unwrap { true })
         assertEquals(
             errorMessagesWith("oops!"),
             Success(Person("george"))
@@ -333,6 +333,15 @@ class BaseResultTest {
                 .projection()
                 .getOrElse { emptyErrorMessages() }
         )
+    }
+
+    @Test
+    fun `unsafe flatMap should pass through the exceptions`() {
+        data class Person(val name: String, val age: Int)
+
+        assertThrows(Throwable::class.java) {
+            Success(Person("binny", 12)).unsafeFlatMap<Person> { throw Throwable("badly") }
+        }
     }
 
     @Test
@@ -402,7 +411,7 @@ class BaseResultTest {
     fun `map should work on success but not failure`() {
         assertEquals(
             31400,
-            Success(314).map { it * 100 }.getOrElse { 0 }
+            Success(314).map { it * 100 }.unwrap { 0 }
         )
         assertEquals(
             errorMessagesWith("oops!"),
@@ -414,7 +423,7 @@ class BaseResultTest {
     fun `should be able to do a safe map on a success`() {
         assertEquals(
             "YAY!",
-            Success("yay!").safeMap { it.uppercase() }.getOrElse { "boo" }
+            Success("yay!").safeMap { it.uppercase() }.unwrap { "boo" }
         )
     }
 

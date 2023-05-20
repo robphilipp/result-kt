@@ -131,6 +131,10 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
      * When the result is a [BaseSuccess] returns a [BaseFailure] of the same type. When
      * the result is a [BaseFailure] returns a [BaseSuccess] of the same type.
      *
+     * Use this function when expecting a failure, to treat that outcome as a success. Likewise,
+     * use this function when a success is the unexpected outcome and should be treated as
+     * a failure.
+     *
      * **Warning**: this function breaks the safety chain unless a new failure producer
      * is specified.
      * @return A [BaseResult] with success type [F] and failure type [S]
@@ -142,12 +146,12 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
         }
 
     /**
-     * **Has side effects**
+     * *Unsafe*
      *
      * The [unsafeForeach] method applies the specified [effectFn] to the [BaseResult] value
      * if the [BaseResult] is a [BaseSuccess]. Otherwise,
      * when the [BaseResult] is a not a [BaseSuccess], does nothing.
-     * @param effectFn The function to apply to the success value
+     * @param effectFn The side-effecting function to apply to the success value
      */
     fun <U> unsafeForeach(effectFn: (success: S) -> U) {
         if (this is BaseSuccess) BaseSuccess<U, F>(effectFn(value))
@@ -168,30 +172,76 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
      * specified, the [foreach] function is **safe**, wrapping exceptions that may have been thrown
      * in the [effectFn] and always returning a [BaseResult].
      * @return A [BaseResult] where the success type is [Unit].
+     * @see unsafeForeach
      */
     fun <U> foreach(effectFn: (success: S) -> U, producer: ((e: Throwable?) -> F)? = null): BaseResult<Unit, F> =
         if (failureProducer == null && producer == null) {
-            BaseSuccess<Unit, F>(unsafeForeach(effectFn))
+            BaseSuccess(unsafeForeach(effectFn))
         } else {
             val prod = (producer ?: failureProducer) as (e: Throwable?) -> F
             safeResultFn(
-                { BaseSuccess(unsafeForeach(effectFn), prod)},
+                { BaseSuccess(unsafeForeach(effectFn), prod) },
                 { e -> prod(e) }
             )
         }
 
-    fun getOrElse(supplier: () -> S): S = when (this) {
+    /**
+     * *Safe*
+     *
+     * Unwraps the [BaseResult], returning a value of type [S].
+     *
+     * Use this function when to guarantee a returned value, regardless of
+     * whether this is a success or failure.
+     *
+     * @param supplier Function that returns a value of type [S], and is
+     * called when this is a failure,
+     * @return  When this is a success, returns the value. Otherwise, on failure
+     * calls the specified supplier and returns the value returned by
+     * the supplier.
+     * @see toOption
+     * @see orElse
+     */
+    fun unwrap(supplier: () -> S): S = when (this) {
         is BaseSuccess -> value
         else -> supplier()
     }
 
+    /**
+     * *Safe*
+     *
+     * Passes through this [BaseResult] when it is a [BaseSuccess]. Otherwise, calls
+     * the specified [supplier] function and passes on the result of that call.
+     *
+     * Use this function to process failures into possible successes.
+     *
+     * @param supplier Function that supplies a [BaseResult] when this result is not a
+     * [BaseSuccess].
+     * @return This [BaseResult] when this result is a [BaseSuccess]. Otherwise, the
+     * [BaseResult] returned by the specified [supplier].
+     * @see toOption
+     * @see unwrap
+     */
     fun orElse(supplier: () -> BaseResult<S, F>): BaseResult<S, F> = when (this) {
         is BaseSuccess -> this
         else -> supplier()
     }
 
-    fun contains(elem: S): Boolean = this is BaseSuccess && value == elem
+    /**
+     * *Safe*
+     *
+     * Determines whether the result contains the specified success value [elem].
+     *
+     * @param elem The value to check for containment
+     * @return `true` when this result is a success and the result's value equals
+     * the specified [elem]; `false` otherwise.
+     */
+    fun contains(elem: S): Boolean = (this is BaseSuccess) && (value == elem)
 
+    /**
+     * *Safe*
+     *
+     *
+     */
     fun forall(predicate: (S) -> Boolean): Boolean = when (this) {
         is BaseSuccess -> predicate(value)
         else -> true
@@ -224,7 +274,7 @@ sealed class BaseResult<S, F>(private val failureProducer: ((e: Throwable?) -> F
         is BaseFailure -> BaseFailure(error)
     }
 
-    fun toOption(): Optional<S & Any> = when (this) {
+    fun toOption(): Optional<out S> = when (this) {
         is BaseSuccess -> Optional.ofNullable(value)
         else -> Optional.empty()
     }
