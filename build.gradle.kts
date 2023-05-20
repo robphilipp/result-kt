@@ -10,6 +10,14 @@ plugins {
 group = "com.digitalcipher"
 version = "0.0.1-snapshot"
 
+tasks.kotlinSourcesJar {
+    from(sourceSets.main.name)
+}
+
+tasks.javadoc {
+    destinationDir
+}
+
 repositories {
     mavenCentral()
 }
