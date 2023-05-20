@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.digitalcipher"
-version = "0.0.1"
+version = "0.0.1-snapshot"
 
 repositories {
     mavenCentral()
@@ -23,15 +23,10 @@ nexusPublishing {
     }
 }
 
-signing {
-    sign(publishing.publications["resultKt"])
-}
-
 publishing {
     publications {
         create<MavenPublication>("resultKt") {
             from(components["kotlin"])
-//        }
 
             pom {
                 name.set("result-kt")
@@ -71,6 +66,10 @@ publishing {
             }
         }
     }
+}
+
+signing {
+    sign(publishing.publications["resultKt"])
 }
 
 dependencies {
